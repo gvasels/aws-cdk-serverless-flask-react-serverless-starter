@@ -26,7 +26,7 @@ export interface AmplifyConfig {
 let amplifyConfig: AmplifyConfig;
 
 // Import the template config for fallback
-import amplifyConfigTemplate from './amplify-config';
+import amplifyConfigTemplate from './amplify-config.ts';
 
 // Use dynamic import() for the local config file
 const loadConfig = async (): Promise<AmplifyConfig> => {

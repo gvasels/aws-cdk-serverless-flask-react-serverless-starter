@@ -2,7 +2,9 @@
 import os
 
 from aws_cdk import App, Aspects, Environment
-from stacks import AppLayerStack, TanStackRouterStack, SharedResourcesStack
+from app_components.project_svc_backend.component import ProjectBackend
+from app_components.frontend.component import FrontEndHosting
+from app_components.shared.component import SharedServices
 from cdk_nag import AwsSolutionsChecks
 
 app = App()
@@ -14,17 +16,26 @@ The repo contains a shared stack which initially contains just a cognito user po
 both the App stack and the TanStack web app.
 '''
 
-app_layer_stack = AppLayerStack(app, "SampleAppLayerStack",
-    description=description
+ss = SharedServices(
+    app,
+    "SharedServices" + "Sandbox",
+    description=description,
 )
 
-tan_stack_router_app_stack = TanStackRouterStack(app, "SampleTanStackRouterAppStack",
-    description=description
+pb = ProjectBackend(
+    app,
+    "ProjectSvcBackend" + "Sandbox",
+    description=description,
+    dynamodb_table_name="Projects",
 )
 
-tan_stack_router_app_stack = SharedResourcesStack(app, "SampleSharedResourcesStack",
-    description=description
+feh = FrontEndHosting(
+    app,
+    "FrontEndHosting" + "Sandbox",
+    description=description,
 )
+
+feh.add_dependency(ss)
 
 Aspects.of(app).add(AwsSolutionsChecks())
 

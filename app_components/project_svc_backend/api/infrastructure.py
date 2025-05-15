@@ -1,3 +1,5 @@
+import pathlib
+
 import json
 from aws_cdk import (
     CfnOutput,
@@ -14,13 +16,18 @@ import os.path
 
 dirname = os.path.dirname(__file__)
 
-class AppLayerStack(Stack):
+class ProjectAPI(Construct):
+    def __init__(
+        self,
+        scope: Construct,
+        id_: str,
+        *,
+        dynamodb_table_name: str,
+        region_name: str,
+        account_id: str
+    ):
+        super().__init__(scope, id_)
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
-
-        stack = Stack.of(self)
-        
         log_level = "INFO"
         
         api_svc_lambda_role = iam.Role(
@@ -41,8 +48,8 @@ class AppLayerStack(Stack):
                     'arn',
                     'aws',
                     'logs',
-                    stack.region,
-                    stack.account,
+                    region_name,
+                    account_id,
                     'log-group',
                     '/aws/lambda/api-svc-lambda-flask',
                     '*'
@@ -61,14 +68,14 @@ class AppLayerStack(Stack):
             ]
         )
         
-        api_svc_lambda = lambda_.Function(
+        self.api_svc_lambda = lambda_.Function(
             self,
             'api-svc-lambda-flask',
             description='flask compute to handle CRUD events related to generating prompts for feature extraction',
             function_name='api-svc-lambda-flask',
             runtime=lambda_.Runtime.PYTHON_3_13,
             code=lambda_.Code.from_asset(
-                os.path.join(dirname, '../src/api_svc_flask'),
+                os.path.join(dirname, './runtime'),
                 bundling=BundlingOptions(
                     image=lambda_.Runtime.PYTHON_3_13.bundling_image,
                     command=[
@@ -96,7 +103,7 @@ class AppLayerStack(Stack):
         )
 
         NagSuppressions.add_resource_suppressions(
-            api_svc_lambda,
+            self.api_svc_lambda,
             apply_to_children=True,
             suppressions=[
                 NagPackSuppression(
@@ -107,7 +114,7 @@ class AppLayerStack(Stack):
         )
 
         #create REST API
-        app_layer_api = apigw.RestApi(
+        self.app_layer_api = apigw.RestApi(
             self,
             'sample-app-layer-api',
             description='API serving as the entrypoint for services running in Lambda or optionally containers',
@@ -118,15 +125,15 @@ class AppLayerStack(Stack):
         )
 
         #add method to root resource
-        root_method = app_layer_api.root.add_method(
+        root_method = self.app_layer_api.root.add_method(
             'GET',
             apigw.LambdaIntegration(
-                api_svc_lambda
+                self.api_svc_lambda
             )
         )
 
         #add profiles resource to root resource
-        profiles_resource = app_layer_api.root.add_resource('profiles')
+        profiles_resource = self.app_layer_api.root.add_resource('profiles')
 
         #add profile_id resource to profiles_resource
         profile_id_resource = profiles_resource.add_resource('{profile_id}')
@@ -135,7 +142,7 @@ class AppLayerStack(Stack):
         get_profiles = profiles_resource.add_method(
             'GET',
             apigw.LambdaIntegration(
-                api_svc_lambda
+                self.api_svc_lambda
             )
         )
 
@@ -143,12 +150,12 @@ class AppLayerStack(Stack):
         get_profile_id = profile_id_resource.add_method(
             'GET',
             apigw.LambdaIntegration(
-                api_svc_lambda
+                self.api_svc_lambda
             )
         )
 
         NagSuppressions.add_resource_suppressions(
-            app_layer_api,
+            self.app_layer_api,
             apply_to_children=True,
             suppressions=[
                 NagPackSuppression(
@@ -159,7 +166,7 @@ class AppLayerStack(Stack):
         )
 
         NagSuppressions.add_resource_suppressions(
-            app_layer_api,
+            self.app_layer_api,
             apply_to_children=True,
             suppressions=[
                 NagPackSuppression(
@@ -170,7 +177,7 @@ class AppLayerStack(Stack):
         )
 
         NagSuppressions.add_resource_suppressions(
-            app_layer_api.deployment_stage,
+            self.app_layer_api.deployment_stage,
             apply_to_children=True,
             suppressions=[
                 NagPackSuppression(
@@ -232,8 +239,3 @@ class AppLayerStack(Stack):
                 }
             ]
         )
-
-
-
-
-

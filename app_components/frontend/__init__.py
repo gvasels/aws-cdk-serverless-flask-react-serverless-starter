@@ -1,0 +1,1 @@
+from .hosting.infrastructure import HostedWebApp

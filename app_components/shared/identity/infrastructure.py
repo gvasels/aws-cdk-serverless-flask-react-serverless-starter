@@ -1,23 +1,25 @@
+import pathlib
+
 import json
 from aws_cdk import (
     CfnOutput,
     Duration,
     Stack,
     aws_iam as iam,
-    aws_cognito as cognito)
+    aws_cognito as cognito,
+    RemovalPolicy)
 from constructs import Construct
 from cdk_nag import NagSuppressions, NagPackSuppression
 import os.path
 
-dirname = os.path.dirname(__file__)
+class Identity(Construct):
+    def __init__(
+        self,
+        scope: Construct,
+        id_: str
+    ):
+        super().__init__(scope, id_)
 
-class SharedResourcesStack(Stack):
-
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
-
-        stack = Stack.of(self)
-        
         log_level = "INFO"
         
         #create a cognito user pool
@@ -40,26 +42,13 @@ class SharedResourcesStack(Stack):
                 require_digits=True,
                 require_symbols=True,
                 temp_password_validity=Duration.days(7)
-            )
-        )
-
-        # Export the user pool ARN
-        self.user_pool_arn_output = CfnOutput(
-            self, "UserPoolArn",
-            value=user_pool.user_pool_arn,
-            export_name="CognitoUserPoolArn"
-        )
-        
-        # Export the user pool ID as well
-        self.user_pool_id_output = CfnOutput(
-            self, "UserPoolId",
-            value=user_pool.user_pool_id,
-            export_name="CognitoUserPoolId"
+            ),
+            removal_policy=RemovalPolicy.DESTROY
         )
         
         self.user_pool = user_pool
 
-                # Add suppression for the imported user pool
+        # Add suppression for the imported user pool
         NagSuppressions.add_resource_suppressions(
             user_pool,
             suppressions=[

@@ -1,3 +1,5 @@
+import pathlib
+
 import json
 from aws_cdk import (
     CfnOutput,
@@ -15,13 +17,17 @@ from aws_cdk import (
 from constructs import Construct
 from cdk_nag import NagSuppressions, NagPackSuppression
 import os.path
-dirname = os.path.dirname(__file__)
 
-class TanStackRouterStack(Stack):
+class HostedWebApp(Construct):
+    def __init__(
+        self,
+        scope: Construct,
+        id_: str
+    ):
+        super().__init__(scope, id_)
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
-
+        log_level = "INFO"
+        
         hosting_bucket = s3.Bucket(
             self,
             'react-router-app-hostbucket',
@@ -34,7 +40,7 @@ class TanStackRouterStack(Stack):
         
         )
 
-        react_app_distribution = cloudfront.Distribution(
+        self.react_app_distribution = cloudfront.Distribution(
             self,
             'react-router-app-cdnDistro',
             default_behavior=cloudfront.BehaviorOptions(
@@ -56,12 +62,12 @@ class TanStackRouterStack(Stack):
                 principals=[iam.ServicePrincipal("cloudfront.amazonaws.com")],
                 conditions={
                     "StringEquals": {
-                        "AWS:SourceArn": f"arn:aws:cloudfront::{self.account}:distribution/{react_app_distribution.distribution_id}"
+                        "AWS:SourceArn": f"arn:aws:cloudfront::*:distribution/{self.react_app_distribution.distribution_id}"
                     }
                 }
             )
         )
-        react_app_domain_name = react_app_distribution.distribution_domain_name
+        react_app_domain_name = self.react_app_distribution.distribution_domain_name
         shared_user_pool_arn = Fn.import_value("CognitoUserPoolArn")
 
         # Create an app client which should be used by the react application
@@ -70,7 +76,7 @@ class TanStackRouterStack(Stack):
         )
 
         # Create the app client with the specified token settings
-        app_client = shared_user_pool.add_client(
+        self.app_client = shared_user_pool.add_client(
             "serverless-starter-app-client",
             user_pool_client_name="serverless-starter-app-client",
             
@@ -164,7 +170,7 @@ class TanStackRouterStack(Stack):
             self, 'DeployReactApp',
             sources=[s3deploy.Source.asset(os.path.join(os.path.dirname(__file__), '../vite-tanstack-router-app/dist'))],
             destination_bucket=hosting_bucket,
-            distribution=react_app_distribution,
+            distribution=self.react_app_distribution,
             distribution_paths=['/*'],  # Invalidate all cached files after deployment
             prune=False,  # Don't delete files that no longer exist in the source
             role=deployment_role  # Use our custom role with CloudFront permissions
@@ -185,7 +191,7 @@ class TanStackRouterStack(Stack):
 
         # 2. Suppress CloudFront distribution warnings and errors
         NagSuppressions.add_resource_suppressions(
-            react_app_distribution,
+            self.react_app_distribution,
             suppressions=[
                 NagPackSuppression(
                     id="AwsSolutions-CFR1",
@@ -251,38 +257,19 @@ class TanStackRouterStack(Stack):
                 )
                 break
 
-        # 5. Add stack-level suppressions for any remaining resources that might be harder to target directly
-        NagSuppressions.add_stack_suppressions(
+        # 5. Add resource-level suppressions for any remaining resources that might be harder to target directly
+        # Note: Stack-level suppressions should be applied at the Stack level, not in this construct
+        NagSuppressions.add_resource_suppressions(
             self,
+            apply_to_children=True,
             suppressions=[
-                {
-                    "id": "AwsSolutions-IAM5",
-                    "reason": "Wildcard permissions required by CDK BucketDeployment custom resource.",
-                    "applies_to": [
-                        "Resource::*", 
-                        "Action::s3:GetBucket*",
-                        "Action::s3:GetObject*",
-                        "Action::s3:List*",
-                        "Action::s3:Abort*",
-                        "Action::s3:DeleteObject*",
-                        "Action::cloudfront:GetInvalidation",
-                        "Action::cloudfront:CreateInvalidation"
-                    ]
-                },
-                {
-                    "id": "AwsSolutions-L1",
-                    "reason": "Using CDK provided Lambda runtime which is managed by AWS CDK team."
-                }
+                NagPackSuppression(
+                    id="AwsSolutions-IAM5",
+                    reason="Wildcard permissions required by CDK BucketDeployment custom resource."
+                ),
+                NagPackSuppression(
+                    id="AwsSolutions-L1",
+                    reason="Using CDK provided Lambda runtime which is managed by AWS CDK team."
+                )
             ]
         )
-
-        # Output the CloudFront URL
-        CfnOutput(
-            self, 'CloudFrontURL',
-            value=f'https://{react_app_distribution.distribution_domain_name}'
-        )
-
-
-
-
-
